@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vérification avant Impression</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/2.1.1/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: auto; }
+        #errorText {
+            width: 100%;
+            min-height: 300px;
+            margin-top: 10px;
+            resize: vertical;
+            font-family: monospace;
+            white-space: pre-wrap;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 10px;
+        }
+        .button { margin-top: 10px; padding: 10px 20px; }
+        #loading { display: none; font-size: 16px; color: #333; margin-top: 10px; }
+        .error { color: red; font-weight: bold; }
+        .incorrect { color: #FFA500; } /* Texte incorrect en jaune */
+        .suggestion { color: green; } /* Suggestion en vert */
+        .success { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Vérification des Informations avant Impression</h2>
+        
+        <input type="file" id="fileInput" accept="image/*, application/pdf">
+        <button id="extractTextBtn" class="button">Extraire et Vérifier le Texte</button>
+        <button id="resetBtn" class="button">Réinitialiser</button>
+        <div id="loading">Chargement en cours... <span>⏳</span></div>
+        
+        <pre id="errorText" placeholder="Les erreurs détectées s'afficheront ici..."></pre>
+    </div>
+
+    <script>
+        const extractTextBtn = document.getElementById('extractTextBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const fileInput = document.getElementById('fileInput');
+        const errorText = document.getElementById('errorText');
+        const loadingIndicator = document.getElementById('loading');
+
+        const apiUrl = "https://api.languagetoolplus.com/v2/check";
+        const cocktailNames = ["mojito", "margarita", "martini", "pina colada", "salazar"];
+
+        function showLoading(show) {
+            loadingIndicator.style.display = show ? 'block' : 'none';
+        }
+
+        function checkSpelling(text) {
+            fetch(apiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({ text, language: "fr" })
+            })
+            .then(response => response.json())
+            .then(data => {
+                let errorMessages = '';
+                data.matches.forEach(match => {
+                    const errorWord = match.context.text.slice(match.context.offset, match.context.offset + match.context.length);
+                    const ignoreError = cocktailNames.includes(errorWord.toLowerCase()) || /\d|[!@#$%^&*(),.?":{}|<>]/.test(errorWord);
+
+                    if (!ignoreError) {
+                        errorMessages += `<span class="error">Erreur:</span> Faute de frappe possible trouvée.\n`;
+                        errorMessages += `<span class="incorrect">Texte incorrect:</span> ${errorWord}\n`;
+                        errorMessages += `<span class="suggestion">Correction suggérée:</span> ${match.replacements.map(r => r.value).join(', ')}\n\n`;
+                    }
+                });
+
+                if (errorMessages) {
+                    errorText.innerHTML = errorMessages;
+                    errorText.classList.remove("success");
+                } else {
+                    errorText.innerHTML = "<span class='success'>Aucune erreur détectée dans l'image ou le PDF.</span>";
+                    errorText.classList.add("success");
+                }
+            })
+            .catch(error => {
+                console.error("Erreur lors de la vérification d'orthographe :", error);
+            })
+            .finally(() => showLoading(false));
+        }
+
+        extractTextBtn.addEventListener('click', function() {
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Veuillez télécharger un fichier avant de lancer l'extraction de texte.");
+                return;
+            }
+
+            errorText.textContent = '';
+            showLoading(true);
+
+            const fileType = file.type;
+
+            if (fileType.includes('image')) {
+                Tesseract.recognize(file, 'fra', { logger: m => console.log(m) })
+                    .then(({ data: { text } }) => {
+                        checkSpelling(text); 
+                    })
+                    .catch(error => {
+                        console.error("Erreur lors de l'extraction du texte de l'image :", error);
+                        showLoading(false);
+                    });
+            } else if (fileType === 'application/pdf') {
+                const fileReader = new FileReader();
+                fileReader.onload = function() {
+                    const typedarray = new Uint8Array(this.result);
+                    
+                    pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+                        let textContent = '';
+                        let pagePromises = [];
+                        
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            pagePromises.push(
+                                pdf.getPage(i).then(page => {
+                                    return page.getTextContent().then(textContentObj => {
+                                        textContentObj.items.forEach(item => {
+                                            textContent += item.str + ' ';
+                                        });
+                                    });
+                                })
+                            );
+                        }
+
+                        Promise.all(pagePromises).then(() => {
+                            checkSpelling(textContent);
+                        });
+                    });
+                };
+                fileReader.readAsArrayBuffer(file);
+            } else {
+                alert("Format de fichier non supporté. Veuillez télécharger une image ou un PDF.");
+                showLoading(false);
+            }
+        });
+
+        resetBtn.addEventListener('click', function() {
+            fileInput.value = '';
+            errorText.innerHTML = '';
+            errorText.classList.remove("success");
+            showLoading(false);
+        });
+    </script>
+</body>
+</html>
