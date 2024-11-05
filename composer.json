@@ -1,0 +1,15 @@
+{
+    "name": "jackson/errorfinder",
+    "autoload": {
+        "psr-4": {
+            "Jackson\\Errorfinder\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Jackson",
+            "email": "ganarajahdonald@gmail.com"
+        }
+    ],
+    "require": {}
+}
