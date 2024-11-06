@@ -13,7 +13,7 @@
     <button onclick="extractText()">Extraire le texte</button>
 
     <h3>Texte extrait :</h3>
-    <pre id="output"></pre>
+    <pre id="output">Aucun texte extrait pour le moment.</pre>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
@@ -53,11 +53,20 @@
                     contentType: 'application/json',
                     data: JSON.stringify(requestData),
                     success: function(response) {
-                        const text = response.responses[0].textAnnotations ? response.responses[0].textAnnotations[0].description : "Aucun texte détecté.";
-                        document.getElementById('output').textContent = text;
+                        console.log(response); // Pour voir la réponse complète de l'API
+                        if (response.responses && response.responses[0].textAnnotations) {
+                            const text = response.responses[0].textAnnotations[0].description;
+                            if (text) {
+                                document.getElementById('output').textContent = text;
+                            } else {
+                                document.getElementById('output').textContent = "Aucun texte détecté.";
+                            }
+                        } else {
+                            document.getElementById('output').textContent = "Erreur : Aucune annotation de texte trouvée dans la réponse.";
+                        }
                     },
                     error: function(error) {
-                        console.error('Erreur:', error);
+                        console.error('Erreur lors de la requête API:', error);
                         document.getElementById('output').textContent = 'Une erreur s\'est produite lors de l\'extraction du texte.';
                     }
                 });
