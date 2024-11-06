@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extraction de texte d'une image</title>
+</head>
+
+<body>
+    <h2>Choisir une image pour extraire le texte</h2>
+    <input type="file" id="imageInput" accept="image/*">
+    <button onclick="extractText()">Extraire le texte</button>
+
+    <h3>Texte extrait :</h3>
+    <pre id="output"></pre>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        const API_KEY = 'YOUR_GOOGLE_CLOUD_API_KEY'; // Remplacez par votre clé API Google Cloud Vision
+
+        // Fonction pour extraire le texte d'une image
+        function extractText() {
+            const fileInput = document.getElementById('imageInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Veuillez sélectionner une image.');
+                return;
+            }
+
+            // Lire l'image comme une base64
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const imageData = e.target.result.split(',')[1]; // On enlève le préfixe 'data:image/png;base64,'
+
+                // Préparer la requête à envoyer à l'API Google Cloud Vision
+                const requestData = {
+                    "requests": [{
+                        "image": {
+                            "content": imageData
+                        },
+                        "features": [{
+                            "type": "TEXT_DETECTION",
+                            "maxResults": 1
+                        }]
+                    }]
+                };
+
+                // Effectuer la requête à l'API Google Cloud Vision
+                $.ajax({
+                    url: `https://vision.googleapis.com/v1/images:annotate?key=${API_KEY}`,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(requestData),
+                    success: function(response) {
+                        const text = response.responses[0].textAnnotations ? response.responses[0].textAnnotations[0].description : "Aucun texte détecté.";
+                        document.getElementById('output').textContent = text;
+                    },
+                    error: function(error) {
+                        console.error('Erreur:', error);
+                        document.getElementById('output').textContent = 'Une erreur s\'est produite lors de l\'extraction du texte.';
+                    }
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+    </script>
+</body>
+
+</html>
