@@ -1,77 +1,166 @@
 <?php
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
+if ($_SERVER["REQUEST_METHOD"] === "POST" && !empty($_POST['imagePath'])) {
     $imagePath = $_POST['imagePath'];
     ?>
     <!DOCTYPE html>
     <html lang="fr">
+
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Vérification de Texte</title>
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-        <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+        <title>Détection et Correction de Texte en Français</title>
         <style>
-            body { font-family: Arial, sans-serif; }
-            .container { width: 80%; margin: 20px auto; }
-            .alert { padding: 10px; margin-top: 10px; border-radius: 4px; color: black; }
-            .alert-danger { background-color: #f9f9f9; color: red; }
-            .alert-success { background-color: #28a745; color: white; }
-            .incorrect { color: orange; font-weight: bold; }
-            .correction { color: black; font-weight: bold; }
-            .suggestion { color: green; font-weight: bold; }
+            /* CSS amélioré pour la visibilité */
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
+            
+            body {
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                background-color: #f4f4f9;
+                padding: 20px;
+                min-height: 100vh;
+            }
+            
+            .container {
+                width: 100%;
+                max-width: 600px;
+                text-align: center;
+                padding: 20px;
+                background-color: #fff;
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            }
+            
+            h1 {
+                color: #333;
+                font-size: 1.8em;
+                margin-bottom: 15px;
+            }
+            
+            img {
+                margin: 15px 0;
+                max-width: 100px;
+            }
+            
+            button {
+                background-color: #0d6efd;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 1em;
+                margin: 5px;
+            }
+            
+            #output {
+                margin-top: 20px;
+                text-align: left;
+            }
+            
+            #detectedText {
+                font-weight: bold;
+                color: #333;
+                background-color: #f9f9f9;
+                padding: 10px;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                margin-top: 10px;
+                overflow-wrap: break-word;
+            }
+            
+            #correctionsList {
+                list-style: none;
+                padding: 0;
+            }
+            
+            #correctionsList li {
+                margin: 5px 0;
+                color: #d9534f;
+            }
         </style>
     </head>
+
     <body>
         <div class="container">
-            <h1>Vérification de Texte</h1>
-            <p>Image vérifiée : <img src="<?= htmlspecialchars($imagePath) ?>" width="100"></p>
-            <div id="errorText" class="alert alert-danger" style="display: none;"></div>
+            <h1>Détection et Correction de Texte</h1>
+            <p>Image vérifiée : <img src="<?= htmlspecialchars($imagePath) ?>" alt="Image vérifiée"></p>
+
+            <div id="output">
+                <h2>Texte Détecté :</h2>
+                <p id="detectedText"></p>
+
+                <h2>Erreurs et Corrections :</h2>
+                <ul id="correctionsList"></ul>
+            </div>
         </div>
 
+        <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
         <script>
-            const ignoreWords = ["cocktail", "whiskey", "rhum", "gin", "vodka", "fastfood", "burger"];
             const imagePath = "<?= $imagePath ?>";
 
-            Tesseract.recognize(imagePath, 'fra', { logger: m => console.log(m) })
-                .then(async ({ data: { text } }) => {
-                    text = text.toLowerCase().replace(/[\r\n]+/g, ' ').trim();
-                    const wordsToIgnore = new RegExp(`\\b(${ignoreWords.join('|')})\\b`, 'gi');
-                    const filteredText = text.replace(wordsToIgnore, '');
-                    const alphaOnlyText = filteredText.replace(/[^a-zA-Z\s]/g, '');
-
-                    const response = await fetch("https://api.languagetoolplus.com/v2/check", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                        body: new URLSearchParams({
-                            text: alphaOnlyText,
-                            language: "fr"
-                        })
-                    });
-                    const result = await response.json();
-                    const errorText = document.getElementById('errorText');
-                    
-                    if (result.matches.length > 0) {
-                        let corrections = '<strong>Erreurs détectées :</strong><br>';
-                        result.matches.forEach(match => {
-                            const errorWord = match.context.text.substring(match.context.offset, match.context.offset + match.context.length);
-                            const suggestions = match.replacements.map(r => `<span class="suggestion">${r.value}</span>`).join(', ');
-                            corrections += `<p class="incorrect">Texte incorrect : <span class="error">${errorWord}</span></p>
-                                            <p class="correction">Correction possible : ${suggestions}</p><br>`;
-                        });
-                        errorText.innerHTML = corrections;
-                        errorText.style.display = 'block';
-                    } else {
-                        errorText.innerHTML = "<strong>Aucune faute détectée</strong>";
-                        errorText.className = "alert alert-success";
-                        errorText.style.display = 'block';
+            function detectText(imagePath) {
+                Tesseract.recognize(
+                    imagePath,
+                    'fra', {
+                        logger: m => console.log(m)
                     }
-                }).catch(err => {
-                    console.error("Erreur lors de l'analyse OCR", err);
+                ).then(({ data: { text } }) => {
+                    document.getElementById("detectedText").innerText = text;
+                    detectErrorsWithLanguageTool(text);
                 });
+            }
+
+            function detectErrorsWithLanguageTool(text) {
+                const url = 'https://api.languagetoolplus.com/v2/check';
+                const params = new URLSearchParams();
+                const ignoreWords = [
+                    "cocktail", "whiskey", "rhum", "gin", "vodka", "fastfood", "burger", "pizza", "pasta",
+                    "beer", "wine", "soda", "coke", "fanta", "juice", "milkshake", "donut", "sandwich",
+                ];
+                
+                const filteredText = text.replace(new RegExp(`\\b(${ignoreWords.join('|')})\\b`, 'gi'), ''); // Suppression des mots ignorés
+                params.append("text", filteredText);
+                params.append("language", "fr");
+
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: params.toString()
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const correctionsList = document.getElementById("correctionsList");
+                    correctionsList.innerHTML = ""; // Clear previous corrections
+
+                    if (data.matches.length === 0) {
+                        correctionsList.innerHTML = "<li>Aucune erreur détectée !</li>";
+                    } else {
+                        data.matches.forEach(match => {
+                            const original = match.context.text.substr(match.context.offset, match.context.length);
+                            const suggestion = match.replacements.length > 0 ? match.replacements[0].value : "Pas de suggestion";
+                            const listItem = document.createElement("li");
+                            listItem.textContent = `${original} ➔ ${suggestion}`;
+                            correctionsList.appendChild(listItem);
+                        });
+                    }
+                })
+                .catch(error => console.error("Erreur avec l'API LanguageTool:", error));
+            }
+
+            detectText(imagePath);
         </script>
     </body>
     </html>
     <?php
 } else {
-    echo "Méthode non autorisée.";
+    echo "Méthode non autorisée ou image manquante.";
 }
