@@ -1,26 +1,40 @@
-const express = require('express');
+const http = require('http');
+const fs = require('fs');
 const path = require('path');
-const PHPFPM = require('express-php-fpm');
 
-const app = express();
-const PORT = 3000; // Choisissez un port pour votre serveur
+const server = http.createServer((req, res) => {
+  const filePath = path.join(__dirname, req.url);
 
-// Utilisez express-php-fpm pour traiter les fichiers PHP
-const php = new PHPFPM({
-    documentRoot: path.join(__dirname),
-    port: 9000 // Changez le port si nécessaire
+  // Si c'est un fichier PHP
+  if (filePath.endsWith('.php')) {
+    const php = require('child_process').spawn('php-cgi', ['-f', filePath]);
+
+    php.stdout.on('data', (data) => {
+      res.write(data);
+    });
+
+    php.stderr.on('data', (data) => {
+      res.write(`Erreur PHP: ${data}`);
+    });
+
+    php.on('close', () => {
+      res.end();
+    });
+  } else {
+    fs.readFile(filePath, 'utf-8', (err, data) => {
+      if (err) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.write('Page non trouvée');
+        res.end();
+      } else {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.write(data);
+        res.end();
+      }
+    });
+  }
 });
 
-// Route pour le fichier verification.php
-app.get('/verification', (req, res) => {
-    // Vous pouvez personnaliser ce chemin si votre fichier PHP est dans un autre répertoire
-    php.run(req, res, path.join(__dirname, 'verification.php'));
-});
-
-// Servir les fichiers statiques (CSS, JavaScript, etc.)
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Démarrer le serveur
-app.listen(PORT, () => {
-    console.log(`Serveur en écoute sur http://localhost:${PORT}`);
+server.listen(3000, () => {
+  console.log('Serveur Node.js en écoute sur http://localhost:3000');
 });
