@@ -1,6 +1,7 @@
 <?php
-if ($_SERVER["REQUEST_METHOD"] === "POST" && !empty($_POST['imagePath'])) {
-    $imagePath = $_POST['imagePath'];
+header('Content-Type: text/html; charset=UTF-8');  // Indique que la réponse doit être en HTML
+if ($_SERVER["REQUEST_METHOD"] === "POST" && !empty($_FILES['image'])) {
+    $imagePath = $_FILES['image'];
     ?>
     <!DOCTYPE html>
     <html lang="fr">
