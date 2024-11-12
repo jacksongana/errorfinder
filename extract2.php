@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Images</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- v5 -->
+<script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    <style>
+        /* Styles de base */
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            width: 80%;
+            margin: 20px auto;
+        }
+        .file-input-container {
+            display: flex;
+            align-items: center;
+        }
+        .file-input-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            background-color: #007bff;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 4px;
+        }
+        .file-input-label i {
+            margin-right: 8px;
+        }
+        .selected-file {
+            margin-left: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+        .alert {
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+            color: black;
+        }
+        .alert-danger {
+            background-color: #f9f9f9;
+        }
+        .alert-success {
+            background-color: #28a745;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .incorrect {
+            color: #FFA500;
+        }
+        .correction {
+            color: black;
+            font-weight: bold;
+        }
+        .suggestion {
+            color: green;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: center;
+        }
+        .extract {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            position: relative;
+        }
+        .loading-icon {
+            position: absolute;
+            right: 5px;
+            top: 5px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gestion des Images</h1>
+
+        <div class="form-group">
+            <h2>Ajouter une nouvelle image</h2>
+            <div class="file-input-container">
+                <label class="file-input-label">
+                    <i class="fas fa-upload"></i> Choisir une image
+                    <input type="file" id="imageInput" accept="image/*" onchange="handleFileSelect(event)" style="display: none;">
+                </label>
+                <span class="selected-file" id="selectedFileName"></span>
+            </div>
+            <button onclick="uploadImage()" style="margin-top: 10px;">Ajouter</button>
+        </div>
+
+        <!-- Tableau des images -->
+        <table id="imagesTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Aperçu</th>
+                    <th>Nom du fichier</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Les images seront insérées ici -->
+            </tbody>
+        </table>
+
+        <div id="errorText" class="alert alert-danger" style="display: none;"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:2000/api.php';
+        let selectedFile = null;
+
+        document.addEventListener('DOMContentLoaded', loadImages);
+
+        function handleFileSelect(event) {
+            selectedFile = event.target.files[0];
+            document.getElementById('selectedFileName').textContent = selectedFile.name;
+        }
+
+        async function uploadImage() {
+            if (!selectedFile) {
+                showAlert('Veuillez sélectionner une image', 'danger');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', selectedFile);
+
+            try {
+                const response = await fetch(`${API_URL}?action=addimage`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('Image ajoutée avec succès', 'success');
+                    loadImages();
+                } else {
+                    showAlert(data.error || 'Erreur lors de l\'ajout', 'danger');
+                }
+            } catch (error) {
+                showAlert('Erreur lors de la communication avec le serveur', 'danger');
+            }
+        }
+
+        async function loadImages() {
+            try {
+                const response = await fetch(`${API_URL}?action=allimages`);
+                const images = await response.json();
+                
+                const tbody = document.querySelector('#imagesTable tbody');
+                tbody.innerHTML = '';
+                
+                images.forEach(image => {
+                    const row = `
+                        <tr>
+                            <td>${image.id}</td>
+                            <td><img src="${image.image}" class="image-preview" onerror="this.src='placeholder.jpg'" width="50"></td>
+                            <td>${image.image.split('/').pop()}</td>
+                            <td>
+                                <button class="extract" onclick="checkSpellingFromImage('${image.image}', this)">
+                                    <i class="fas fa-check-circle"></i> Vérifier
+                                    <span class="loading-icon"><i class="fas fa-spinner fa-spin"></i></span>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.innerHTML += row;
+                });
+            } catch (error) {
+                showAlert('Erreur lors du chargement des images', 'danger');
+            }
+        }
+
+        async function checkSpellingFromImage(imagePath, button) {
+            const errorText = document.getElementById('errorText');
+            errorText.style.display = 'inline-block';
+
+            const loadingIcon = button.querySelector('.loading-icon');
+            loadingIcon.style.display = 'inline-block';
+
+            Tesseract.recognize(imagePath, 'fra', { logger: m => console.log(m) })
+                .then(async ({ data: { text } }) => {
+                    const response = await fetch("https://api.languagetoolplus.com/v2/check", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: new URLSearchParams({
+                            text: text,
+                            language: "fr"  // Langue spécifiée pour ne détecter que les erreurs en français
+                        })
+                    });
+
+                    const result = await response.json();
+                    if (result.matches.length > 0) {
+                        let corrections = '<strong>Erreurs détectées :</strong><br>';
+                        result.matches.forEach(match => {
+                            const errorWord = match.context.text.substring(match.context.offset, match.context.offset + match.context.length);
+                            const suggestions = match.replacements.map(r => `<span class="suggestion">${r.value}</span>`).join(', ');
+
+                            corrections += `<p class="incorrect"> Texte incorrect : <span class="error">${errorWord}</span></p> <p class="correct"> Correction possible :  <span class="correction">${suggestions}</span></p><br>`;
+                        });
+                        errorText.innerHTML = corrections;
+                        errorText.style.display = 'block';
+                    } else {
+                        showAlert("Aucune faute détectée", 'success');
+                    }
+                }).catch(err => {
+                    showAlert("Erreur lors de l'analyse OCR", 'danger');
+                    console.error(err);
+                }).finally(() => {
+                    loadingIcon.style.display = 'none';
+                });
+        }
+
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            
+            const container = document.querySelector('.container');
+            container.insertBefore(alertDiv, container.firstChild);
+            
+            setTimeout(() => alertDiv.remove(), 3000);
+        }
+    </script>
+</body>
+</html>
